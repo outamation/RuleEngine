@@ -10,8 +10,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Text.Json;
-using DemoRuleEngine.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace DemoRuleEngine.Services;
 
@@ -19,13 +17,11 @@ public class EligibilityService : IEligibilityService
 {
     private readonly IRuleManagerService _ruleManager;
     private readonly ILogger<EligibilityService> _logger;
-    private readonly RuleDbContext _db;
 
-    public EligibilityService(IRuleManagerService ruleManager, ILogger<EligibilityService> logger, RuleDbContext db)
+    public EligibilityService(IRuleManagerService ruleManager, ILogger<EligibilityService> logger)
     {
         _ruleManager = ruleManager;
         _logger = logger;
-        _db = db;
     }
 
     public async Task<EligibilityResult> EvaluateAsync(string workflowName, object inputData)
@@ -43,15 +39,6 @@ public class EligibilityService : IEligibilityService
             var ruleParams = new RuleParameter("input", flattenedData);
             var results = await engine.ExecuteAllRulesAsync(workflowName, ruleParams);
 
-            // Retrieve all rules for this workflow from DB to get their FieldsUsed properties
-            var workflowEntity = await _db.Workflows
-                .Include(w => w.Rules)
-                .FirstOrDefaultAsync(w => w.WorkflowName == workflowName);
-
-            var rulesDict = workflowEntity?.Rules?
-                .ToDictionary(r => r.RuleName, r => r, StringComparer.OrdinalIgnoreCase)
-                ?? new Dictionary<string, RuleEntity>(StringComparer.OrdinalIgnoreCase);
-
             response.TotalRulesEvaluated = results.Count;
             response.RulesPassed = results.Count(r => r.IsSuccess);
             response.RulesFailed = results.Count(r => !r.IsSuccess);
@@ -59,8 +46,6 @@ public class EligibilityService : IEligibilityService
 
             foreach (var r in results)
             {
-                rulesDict.TryGetValue(r.Rule.RuleName, out var dbRule);
-
                 var outcome = new RuleOutcome
                 {
                     RuleName = r.Rule.RuleName,
@@ -71,7 +56,7 @@ public class EligibilityService : IEligibilityService
                     ErrorMessage = !r.IsSuccess
                         ? (string.IsNullOrEmpty(r.Rule.ErrorMessage) ? "Exception" : FormatDynamicPlaceholders(r.Rule.ErrorMessage, flattenedData))
                         : null,
-                    ConfidenceScore = CalculateLowestConfidence(r, inputData, dbRule)
+                    ConfidenceScore = CalculateLowestConfidence(r, inputData)
                 };
 
                 // Get individual field failures for the comment
@@ -350,134 +335,77 @@ public class EligibilityService : IEligibilityService
         return expressions;
     }
 
-    private double? CalculateLowestConfidence(RuleResultTree result, object inputData, RuleEntity? dbRule)
+    private double? CalculateLowestConfidence(RuleResultTree result, object inputData)
     {
+        var expressions = GetExpressionsRecursive(result);
+        if (!expressions.Any()) return null;
+
         var fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // 1. Try to read pre-parsed fields from the Rule Entity from database first
-        if (dbRule?.Definition?.Properties != null &&
-            dbRule.Definition.Properties.TryGetValue("FieldsUsed", out var dbFieldsObj))
+        var wordRegex = new Regex(@"\b[a-zA-Z_]\w*\b", RegexOptions.Compiled);
+        
+        var reservedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            if (dbFieldsObj is IEnumerable<object> fieldsList)
-            {
-                foreach (var f in fieldsList)
-                {
-                    if (f is string s)
-                    {
-                        fields.Add(s);
-                    }
-                }
-            }
-            else if (dbFieldsObj is Newtonsoft.Json.Linq.JArray jArray)
-            {
-                foreach (var token in jArray)
-                {
-                    var val = token.ToString();
-                    if (!string.IsNullOrEmpty(val))
-                    {
-                        fields.Add(val);
-                    }
-                }
-            }
-        }
-        // 2. Fallback to in-memory result.Rule.Properties (if the DB entity wasn't found or passed)
-        else if (result.Rule?.Properties != null &&
-                 result.Rule.Properties.TryGetValue("FieldsUsed", out var fieldsObj))
+            "null", "true", "false", "new", "DateTime", "TimeSpan", "Math", "Convert", 
+            "string", "int", "decimal", "double", "bool", "guid", "RuleHelper", "input", "input1"
+        };
+
+        foreach (var expr in expressions)
         {
-            if (fieldsObj is IEnumerable<object> fieldsList)
+            var matches = wordRegex.Matches(expr);
+            foreach (Match match in matches)
             {
-                foreach (var f in fieldsList)
+                var word = match.Value;
+
+                // 1. Skip reserved keywords
+                if (reservedKeywords.Contains(word)) continue;
+
+                // 2. Check if followed by '(' (method call)
+                int nextCharIdx = match.Index + match.Length;
+                while (nextCharIdx < expr.Length && char.IsWhiteSpace(expr[nextCharIdx]))
                 {
-                    if (f is string s)
-                    {
-                        fields.Add(s);
-                    }
+                    nextCharIdx++;
                 }
-            }
-            else if (fieldsObj is Newtonsoft.Json.Linq.JArray jArray)
-            {
-                foreach (var token in jArray)
+                if (nextCharIdx < expr.Length && expr[nextCharIdx] == '(')
                 {
-                    var val = token.ToString();
-                    if (!string.IsNullOrEmpty(val))
-                    {
-                        fields.Add(val);
-                    }
+                    continue; // Method call, skip
                 }
-            }
-        }
 
-        // 2. Fall back to on-the-fly regex parsing if Properties metadata is not present (legacy rules)
-        if (!fields.Any())
-        {
-            var expressions = GetExpressionsRecursive(result);
-            if (!expressions.Any()) return null;
-
-            var wordRegex = new Regex(@"\b[a-zA-Z_]\w*\b", RegexOptions.Compiled);
-            var reservedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "null", "true", "false", "new", "DateTime", "TimeSpan", "Math", "Convert", 
-                "string", "int", "decimal", "double", "bool", "guid", "RuleHelper", "input", "input1"
-            };
-
-            foreach (var expr in expressions)
-            {
-                var matches = wordRegex.Matches(expr);
-                foreach (Match match in matches)
+                // 3. Check if preceded by '.' (nested property access, e.g. .value)
+                int prevCharIdx = match.Index - 1;
+                while (prevCharIdx >= 0 && char.IsWhiteSpace(expr[prevCharIdx]))
                 {
-                    var word = match.Value;
+                    prevCharIdx--;
+                }
 
-                    // Skip reserved keywords
-                    if (reservedKeywords.Contains(word)) continue;
-
-                    // Check if followed by '(' (method call)
-                    int nextCharIdx = match.Index + match.Length;
-                    while (nextCharIdx < expr.Length && char.IsWhiteSpace(expr[nextCharIdx]))
+                if (prevCharIdx >= 0 && expr[prevCharIdx] == '.')
+                {
+                    // Check if preceded by 'input' or 'input\d+'
+                    int wordStartIdx = prevCharIdx - 1;
+                    while (wordStartIdx >= 0 && char.IsWhiteSpace(expr[wordStartIdx]))
                     {
-                        nextCharIdx++;
+                        wordStartIdx--;
                     }
-                    if (nextCharIdx < expr.Length && expr[nextCharIdx] == '(')
+                    if (wordStartIdx >= 0 && (char.IsLetterOrDigit(expr[wordStartIdx]) || expr[wordStartIdx] == '_'))
                     {
-                        continue; // Method call, skip
-                    }
-
-                    // Check if preceded by '.' (nested property access, e.g. .value)
-                    int prevCharIdx = match.Index - 1;
-                    while (prevCharIdx >= 0 && char.IsWhiteSpace(expr[prevCharIdx]))
-                    {
-                        prevCharIdx--;
-                    }
-
-                    if (prevCharIdx >= 0 && expr[prevCharIdx] == '.')
-                    {
-                        // Check if preceded by 'input' or 'input\d+'
-                        int wordStartIdx = prevCharIdx - 1;
-                        while (wordStartIdx >= 0 && char.IsWhiteSpace(expr[wordStartIdx]))
+                        int wordEndIdx = wordStartIdx;
+                        while (wordStartIdx >= 0 && (char.IsLetterOrDigit(expr[wordStartIdx]) || expr[wordStartIdx] == '_'))
                         {
                             wordStartIdx--;
                         }
-                        if (wordStartIdx >= 0 && (char.IsLetterOrDigit(expr[wordStartIdx]) || expr[wordStartIdx] == '_'))
-                        {
-                            int wordEndIdx = wordStartIdx;
-                            while (wordStartIdx >= 0 && (char.IsLetterOrDigit(expr[wordStartIdx]) || expr[wordStartIdx] == '_'))
-                            {
-                                wordStartIdx--;
-                            }
-                            string prevWord = expr.Substring(wordStartIdx + 1, wordEndIdx - wordStartIdx);
-                            if (!string.Equals(prevWord, "input", StringComparison.OrdinalIgnoreCase) && 
-                                !Regex.IsMatch(prevWord, @"^input\d+$", RegexOptions.IgnoreCase))
-                            {
-                                continue; // Sub-property, skip
-                            }
-                        }
-                        else
+                        string prevWord = expr.Substring(wordStartIdx + 1, wordEndIdx - wordStartIdx);
+                        if (!string.Equals(prevWord, "input", StringComparison.OrdinalIgnoreCase) && 
+                            !Regex.IsMatch(prevWord, @"^input\d+$", RegexOptions.IgnoreCase))
                         {
                             continue; // Sub-property, skip
                         }
                     }
-
-                    fields.Add(word);
+                    else
+                    {
+                        continue; // Sub-property, skip
+                    }
                 }
+
+                fields.Add(word);
             }
         }
 

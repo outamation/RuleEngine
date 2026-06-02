@@ -12,12 +12,7 @@ builder.Services.AddSerilog((services, configuration) =>
 
 // --- Database Configuration ---
 builder.Services.AddPooledDbContextFactory<RuleDbContext>(options =>
-   options.UseSqlServer(
-       builder.Configuration.GetConnectionString("DefaultConnection"),
-       sqlOptions => sqlOptions.EnableRetryOnFailure(
-           maxRetryCount: 5,
-           maxRetryDelay: TimeSpan.FromSeconds(30),
-           errorNumbersToAdd: null)));
+   options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Register a scoped DbContext resolved from the factory (for endpoints/scoped services)
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<RuleDbContext>>().CreateDbContext());

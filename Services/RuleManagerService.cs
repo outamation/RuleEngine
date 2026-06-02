@@ -210,23 +210,7 @@ public class RuleManagerService : IRuleManagerService
 
         var builtRule = RuleExpressionBuilder.Build(dto);
 
-        // Sanitize hyphens to underscores to match C# class properties
-        SanitizeRuleExpressions(builtRule);
-
-        // Validate the expression against our hardcoded RuleInput C# class
-        ValidateRuleExpression(builtRule);
-
-        // Extract fields used in the rule expressions
-        var fieldsUsed = RuleExpressionParser.ExtractFieldsFromRule(builtRule);
-
-        // Save the fields used directly inside the Rule's Properties metadata dictionary
-        builtRule.Properties ??= new Dictionary<string, object>();
-        builtRule.Properties["FieldsUsed"] = fieldsUsed.ToList();
-
-        // Merge fields into Sample JSON, keeping existing values
-        var mergedJson = RuleExpressionParser.MergeFieldsIntoSampleJson(dto.SampleJson, fieldsUsed);
-
-        var entity = new RuleEntity { WorkflowId = workflowId, SampleJson = mergedJson };
+        var entity = new RuleEntity { WorkflowId = workflowId, SampleJson = dto.SampleJson };
         entity.UpdateFromRulesEngineRule(builtRule);
 
         db.Rules.Add(entity);
@@ -267,25 +251,8 @@ public class RuleManagerService : IRuleManagerService
         };
 
         var builtRule = RuleExpressionBuilder.Build(dto);
-
-        // Sanitize hyphens to underscores to match C# class properties
-        SanitizeRuleExpressions(builtRule);
-
-        // Validate the expression against our hardcoded RuleInput C# class
-        ValidateRuleExpression(builtRule);
-
-        // Extract fields used in the rule expressions
-        var fieldsUsed = RuleExpressionParser.ExtractFieldsFromRule(builtRule);
-
-        // Save the fields used directly inside the Rule's Properties metadata dictionary
-        builtRule.Properties ??= new Dictionary<string, object>();
-        builtRule.Properties["FieldsUsed"] = fieldsUsed.ToList();
-
         entity.UpdateFromRulesEngineRule(builtRule);
-
-        // Merge fields into Sample JSON, keeping existing values
-        var mergedJson = RuleExpressionParser.MergeFieldsIntoSampleJson(dto.SampleJson, fieldsUsed);
-        entity.SampleJson = mergedJson;
+        entity.SampleJson = dto.SampleJson;
 
         await db.SaveChangesAsync();
         await _auditService.LogChangesAsync("Rule", dto.RuleName, oldClone, entity, changedBy);
@@ -333,57 +300,5 @@ public class RuleManagerService : IRuleManagerService
             .Where(w => w.Id == workflowId)
             .Select(w => w.WorkflowName)
             .FirstOrDefaultAsync();
-    }
-
-    private void ValidateRuleExpression(Rule rule)
-    {
-        ValidateSingleRuleExpression(rule);
-    }
-
-    private void ValidateSingleRuleExpression(Rule rule)
-    {
-        if (rule == null) return;
-
-        if (!string.IsNullOrWhiteSpace(rule.Expression))
-        {
-            try
-            {
-                var workflow = new Workflow
-                {
-                    WorkflowName = "ValidationWorkflow",
-                    Rules = new List<Rule> { rule }
-                };
-
-                var engine = new RulesEngine.RulesEngine(new[] { workflow }, _reSettings);
-                var ruleParams = new RuleParameter("input", new RuleInput());
-                
-                // execute rule check synchronously (this will compile the expression internally)
-                var results = engine.ExecuteAllRulesAsync("ValidationWorkflow", ruleParams).GetAwaiter().GetResult();
-                foreach (var result in results)
-                {
-                    if (!string.IsNullOrEmpty(result.ExceptionMessage))
-                    {
-                        throw new InvalidOperationException(result.ExceptionMessage);
-                    }
-                }
-            }
-            catch (AggregateException ae)
-            {
-                var inner = ae.Flatten().InnerException ?? ae;
-                throw new InvalidOperationException($"Field Validation Error in rule '{rule.RuleName}': {inner.Message}", inner);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Field Validation Error in rule '{rule.RuleName}': {ex.Message}", ex);
-            }
-        }
-
-        if (rule.Rules != null)
-        {
-            foreach (var child in rule.Rules)
-            {
-                ValidateSingleRuleExpression(child);
-            }
-        }
     }
 }

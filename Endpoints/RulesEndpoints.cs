@@ -82,17 +82,7 @@ public class AddRuleFromBuilder : Endpoint<RuleDefinitionDto, RuleEntity>
     {
         var workflowId = Route<int>("workflowId");
 
-        try
-        {
-            await _ruleManager.AddRuleFromDtoAsync(workflowId, req, "Web User");
-        }
-        catch (Exception ex)
-        {
-            AddError(ex.Message);
-            await Send.ErrorsAsync(statusCode: 400, cancellation: ct);
-            return;
-        }
-
+        await _ruleManager.AddRuleFromDtoAsync(workflowId, req, "Web User");
         var created = await _ruleManager.GetRuleByNameAsync(workflowId, req.RuleName);
 
         if (created is null)
@@ -133,16 +123,8 @@ public class UpdateRule : Endpoint<RuleDefinitionDto, RuleEntity>
             return;
         }
 
-        try
-        {
-            var updated = await _ruleManager.UpdateRuleAsync(workflowId, ruleId, req, "Web User");
-            await Send.ResponseAsync(updated, cancellation: ct);
-        }
-        catch (Exception ex)
-        {
-            AddError(ex.Message);
-            await Send.ErrorsAsync(statusCode: 400, cancellation: ct);
-        }
+        var updated = await _ruleManager.UpdateRuleAsync(workflowId, ruleId, req, "Web User");
+        await Send.ResponseAsync(updated, cancellation: ct);
     }
 }
 
