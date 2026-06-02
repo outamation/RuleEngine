@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outa Rule Engine</title>
+    <meta name="description" content="Interactive demo for mortgage loan eligibility evaluation using a configurable rule engine">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ═══ Header ═══ -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Outa Rule Engine</h1>
+                    <span class="logo-subtitle">Eligibility Evaluation System</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator" id="engineStatus">
+                    <span class="status-dot"></span>
+                    <span>Engine Active</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══ Tab Navigation ═══ -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="evaluator" id="tab-evaluator">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Loan Evaluator
+        </button>
+        <button class="tab-btn" data-tab="rules" id="tab-rules">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Rule Dashboard
+        </button>
+        <button class="tab-btn" data-tab="builder" id="tab-builder">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Rule Builder
+        </button>
+    </nav>
+
+    <!-- ═══ Main Content ═══ -->
+    <main class="main-content">
+        <!-- Tab 1: Loan Evaluator -->
+        <section class="tab-panel active" id="panel-evaluator">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div>
+                    <h2>Evaluate Loan Eligibility</h2>
+                    <p>Enter loan application data and evaluate against all active rules</p>
+                </div>
+                <div class="workflow-control">
+                    <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:4px;">Active Workflow</label>
+                    <select id="eval-workflow-selector" class="workflow-select-main"></select>
+                </div>
+            </div>
+            <div class="evaluator-layout">
+                <div class="form-card evaluator-json-card">
+                    <div class="form-card-header">
+                        <div class="header-main">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            <h3>Application Data Payload</h3>
+                        </div>
+                        <div class="form-actions-top">
+                            <button class="btn btn-ghost" onclick="loadSample()">Sample</button>
+                            <button class="btn btn-ghost" onclick="formatEvaluatorJson()">Format</button>
+                        </div>
+                    </div>
+                    <div class="json-editor-container">
+                        <textarea id="evaluator-json-input" class="json-textarea-main" spellcheck="false"></textarea>
+                    </div>
+                    <div class="form-footer">
+                        <button type="button" class="btn btn-primary btn-lg" id="btn-evaluate">Run Evaluation</button>
+                    </div>
+                </div>
+                <div class="results-card" id="resultsPanel">
+                    <div class="results-placeholder" id="resultsPlaceholder">
+                        <p>Enter loan data and click <strong>Run Evaluation</strong></p>
+                    </div>
+                    <div class="results-content" id="resultsContent" style="display:none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Rule Dashboard -->
+        <section class="tab-panel" id="panel-rules">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div>
+                    <h2>Rule Dashboard</h2>
+                    <p>View and manage all configured eligibility rules</p>
+                </div>
+                <div class="workflow-management">
+                    <select id="rules-workflow-selector" class="workflow-select-main"></select>
+                </div>
+            </div>
+            <div class="rules-stats" id="rulesStats"></div>
+            <div class="rules-list" id="rulesList"></div>
+        </section>
+
+        <!-- Tab 3: Rule Builder -->
+        <section class="tab-panel" id="panel-builder">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 24px;">
+                <div>
+                    <h2 style="display: flex; align-items: center; gap: 8px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="color: var(--accent);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                        Rule Builder
+                    </h2>
+                    <p>Create new business rules with AI assistance</p>
+                </div>
+                <div class="workflow-management">
+                    <select id="builder-workflow-selector" class="workflow-select-main"></select>
+                </div>
+            </div>
+
+            <div class="builder-layout">
+                <!-- Left Column: Form -->
+                <div class="builder-form-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;">
+                    <div class="builder-section-title-wrapper" style="padding: 24px 24px 0 24px;">
+                        <h3 class="builder-section-title" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 2px;">Rule Definition</h3>
+                        <p class="builder-section-subtitle" style="font-size: 0.85rem; color: var(--text-muted);">Define the rule logic and configuration</p>
+                    </div>
+                    <form id="builderForm" class="builder-form-body" style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                        <div class="form-row-inline" style="display: flex; gap: 16px; align-items: flex-end;">
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <label for="builder-ruleName" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Rule Name *</label>
+                                <input type="text" id="builder-ruleName" placeholder="e.g. CreditScoreCheck" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                            </div>
+                            <div class="form-group-toggle-inline" style="display: flex; align-items: center; gap: 8px; height: 40px; padding-bottom: 4px;">
+                                <label class="toggle-switch-sm" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" id="builder-enabled" checked>
+                                    <span class="toggle-slider" style="background-color: var(--success); width: 34px; height: 18px; border-radius: 9px; position: relative; display: block; transition: all 0.3s;"></span>
+                                    <span class="toggle-label" style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Enabled</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="builder-expression" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Expression *</label>
+                            <textarea id="builder-expression" rows="3" placeholder="e.g. input.Borrower1CreditScore >= 620" style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="builder-sampleJson" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Sample Payload (JSON)</label>
+                            <textarea id="builder-sampleJson" rows="3" placeholder='e.g. { "Borrower1CreditScore": 720, "ORIG_LTV": 70 }' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                        </div>
+
+                        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 0;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="builder-description" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Success Message</label>
+                                <input type="text" id="builder-description" placeholder="Message when rule succeeds" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="builder-failureMessage" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Failure Message</label>
+                                <input type="text" id="builder-failureMessage" placeholder="Message when rule fails" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="builder-operator" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Operator</label>
+                            <select id="builder-operator" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none; cursor: pointer;">
+                                <option value="">none</option>
+                                <option value="And">And</option>
+                                <option value="Or">Or</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="builder-workflows-to-inject" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Workflows to Inject (comma-separated)</label>
+                            <input type="text" id="builder-workflows-to-inject" placeholder="e.g. SubWorkflow1, SubWorkflow2" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                        </div>
+
+                        <!-- Sub-Rules (Tree Editor) -->
+                        <div class="sub-rules-section" style="margin-top: 16px;">
+                            <div class="sub-rules-header-row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                                <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Sub-Rules (Tree Editor)</h4>
+                                <span id="sub-rules-count-badge" class="badge-count" style="background: rgba(99,102,241,0.15); color: var(--accent-hover); font-size: 0.75rem; font-weight: 700; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">0</span>
+                            </div>
+                            <div id="sub-rules-tree" class="sub-rules-tree-container" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 12px;">
+                                <!-- Recursive Sub-Rule Cards will be dynamically loaded here -->
+                            </div>
+                            <button type="button" id="btn-add-sub-rule-card" class="dashed-add-button" style="width: 100%; border: 2px dashed rgba(99,102,241,0.3); border-radius: 12px; background: transparent; padding: 14px; color: var(--accent-hover); font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Sub-Rule Card
+                            </button>
+                        </div>
+
+                        <!-- Advanced Accordion -->
+                        <details class="advanced-accordion" style="margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: transparent;">
+                            <summary style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--text-secondary); user-select: none;">
+                                <span style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                    Advanced Settings
+                                </span>
+                                <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+                            </summary>
+                            <div class="advanced-content" style="padding: 16px; display: flex; flex-direction: column; gap: 16px; background: rgba(255,255,255,0.01);">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="builder-local-params" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Local Parameters (JSON Array)</label>
+                                    <textarea id="builder-local-params" rows="3" class="json-textarea" placeholder='e.g. [{"Name": "TotalDebt", "Expression": "Debt1 + Debt2"}]' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="builder-actions" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Actions (JSON Object)</label>
+                                    <textarea id="builder-actions" rows="3" class="json-textarea" placeholder='e.g. {"OnSuccess": {"Name": "OutputExpression", "Context": {"Expression": "input1.Field"}}}' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                                </div>
+                            </div>
+                        </details>
+
+                        <div class="builder-footer-row" style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); margin-top: 8px;">
+                            <button type="submit" id="btn-create-rule" class="btn btn-primary btn-lg" style="height: 42px; background: linear-gradient(135deg, #f97316, #ea580c); border-color: #ea580c; font-size: 0.95rem; font-weight: 700; color: white; display: flex; align-items: center; gap: 8px; flex: 1; justify-content: center; box-shadow: 0 4px 12px rgba(249,115,22,0.25);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(0deg);"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                Create Rule
+                            </button>
+                            <button type="button" id="btn-test-expression" class="btn btn-ghost" style="height: 42px; border-color: rgba(16,185,129,0.3); color: var(--success); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Test Expression
+                            </button>
+                            <button type="button" id="btn-reset-builder" class="btn btn-ghost" style="height: 42px; color: var(--text-secondary); font-weight: 600;">Reset</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right Column: AI Copilot -->
+                <div class="builder-sidebar">
+                    <div class="ai-assistant-card" style="background: var(--bg-card); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 20px rgba(139, 92, 246, 0.1); position: sticky; top: 88px;">
+                        <div class="ai-card-header" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 18px 20px; color: white; display: flex; justify-content: space-between; align-items: center;">
+                            <div class="ai-title-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                                <span class="ai-title" style="font-size: 0.95rem; font-weight: 700; text-transform: none; letter-spacing: normal;">AI Copilot</span>
+                            </div>
+                            <span style="font-size: 0.75rem; font-weight: 600; opacity: 0.85; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 20px;">Describe your rule in plain English</span>
+                        </div>
+                        
+                        <div class="ai-card-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                            <textarea id="ai-prompt" rows="5" placeholder="e.g. Check if borrower's credit score is at least 620 and LTV ratio is below 80%" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); padding: 12px; background: var(--bg-input); color: var(--text-primary); font-size: 0.9rem; resize: vertical; min-height: 100px; outline: none; transition: border-color 0.2s;"></textarea>
+                            
+                            <button type="button" id="btn-ai-generate" class="btn btn-accent btn-full" style="height: 42px; background: linear-gradient(135deg, #a78bfa, #8b5cf6); border-color: #8b5cf6; color: white; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(139,92,246,0.25); transform: none; border: none;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                Generate Expression
+                            </button>
+                            
+                            <div id="ai-status" class="ai-status-box" style="display:none; margin-top: 0; padding: 12px; border-radius: 8px; font-size: 0.85rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); color: #a78bfa; align-items: center; gap: 8px;">
+                                <div class="loading-spinner-sm"></div>
+                                <span>Consulting AI...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ═══ Audit Panel (Sidebar) ═══ -->
+    <div class="audit-overlay" id="auditOverlay" onclick="closeAuditPanel()"></div>
+    <aside class="audit-panel" id="auditPanel">
+        <div class="audit-header">
+            <div class="audit-header-title-group">
+                <h3>Audit History</h3>
+                <div class="audit-subtitle" id="auditSubtitle"></div>
+            </div>
+            <button class="btn btn-ghost" onclick="closeAuditPanel()">✕</button>
+        </div>
+        <div class="audit-content" id="auditTrailContent">
+            <div class="loading-spinner">Fetching history...</div>
+        </div>
+    </aside>
+
+    <!-- ═══ Edit Rule Modal ═══ -->
+    <div class="modal-overlay" id="editModalOverlay">
+        <div class="modal-content" style="max-width: 850px;">
+            <div class="modal-header">
+                <h3 id="editModalTitle">Edit Rule</h3>
+                <button class="btn btn-ghost" onclick="closeEditModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="editRuleForm">
+                    <input type="hidden" id="edit-rule-workflow">
+                    <input type="hidden" id="edit-rule-id">
+                    <input type="hidden" id="edit-rule-original-name">
+                    
+                    <div class="form-row-inline" style="display: flex; gap: 16px; align-items: flex-end; margin-bottom: 16px;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label for="edit-rule-name-display" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Rule Name</label>
+                            <input type="text" id="edit-rule-name-display" placeholder="Rule Name" readonly style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-muted); outline: none; cursor: not-allowed;">
+                        </div>
+                        <div class="form-group-toggle-inline" style="display: flex; align-items: center; gap: 8px; height: 40px; padding-bottom: 4px;">
+                            <label class="toggle-switch-sm" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="edit-rule-enabled">
+                                <span class="toggle-slider" style="background-color: var(--success); width: 34px; height: 18px; border-radius: 9px; position: relative; display: block; transition: all 0.3s;"></span>
+                                <span class="toggle-label" style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Enabled</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="edit-rule-expression" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Expression *</label>
+                        <textarea id="edit-rule-expression" rows="3" placeholder="e.g. input.Borrower1CreditScore >= 620" style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="edit-rule-sampleJson" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Sample Payload (JSON)</label>
+                        <textarea id="edit-rule-sampleJson" rows="3" placeholder='e.g. { "Borrower1CreditScore": 720, "ORIG_LTV": 70 }' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                    </div>
+
+                    <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-rule-description" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Success Message</label>
+                            <input type="text" id="edit-rule-description" placeholder="Message when rule succeeds" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-rule-errorMessage" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Failure Message</label>
+                            <input type="text" id="edit-rule-errorMessage" placeholder="Message when rule fails" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="edit-rule-operator" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Operator</label>
+                        <select id="edit-rule-operator" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none; cursor: pointer;">
+                            <option value="">none</option>
+                            <option value="And">And</option>
+                            <option value="Or">Or</option>
+                        </select>
+                    </div>
+
+                    <!-- Sub-Rules (Tree Editor) for Edit -->
+                    <div class="sub-rules-section" style="margin-top: 16px; margin-bottom: 16px;">
+                        <div class="sub-rules-header-row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Sub-Rules (Tree Editor)</h4>
+                            <span id="edit-sub-rules-count-badge" class="badge-count" style="background: rgba(99,102,241,0.15); color: var(--accent-hover); font-size: 0.75rem; font-weight: 700; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">0</span>
+                        </div>
+                        <div id="edit-sub-rules-tree" class="sub-rules-tree-container" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 12px;">
+                            <!-- Recursive Sub-Rule Cards will be dynamically loaded here -->
+                        </div>
+                        <button type="button" id="btn-edit-add-sub-rule-card" class="dashed-add-button" style="width: 100%; border: 2px dashed rgba(99,102,241,0.3); border-radius: 12px; background: transparent; padding: 14px; color: var(--accent-hover); font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Sub-Rule Card
+                        </button>
+                    </div>
+
+                    <!-- Advanced Accordion for Edit -->
+                    <details class="advanced-accordion" style="margin: 16px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: transparent;">
+                        <summary style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--text-secondary); user-select: none;">
+                            <span style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                Advanced Settings
+                            </span>
+                            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+                        </summary>
+                        <div class="advanced-content" style="padding: 16px; display: flex; flex-direction: column; gap: 16px; background: rgba(255,255,255,0.01);">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="edit-rule-workflows-to-inject" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Workflows to Inject (comma-separated)</label>
+                                <input type="text" id="edit-rule-workflows-to-inject" placeholder="e.g. SubWorkflow1, SubWorkflow2" style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="edit-rule-local-params" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Local Parameters (JSON Array)</label>
+                                <textarea id="edit-rule-local-params" rows="3" class="json-textarea" placeholder='e.g. [{"Name": "TotalDebt", "Expression": "Debt1 + Debt2"}]' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="edit-rule-actions" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Actions (JSON Object)</label>
+                                <textarea id="edit-rule-actions" rows="3" class="json-textarea" placeholder='e.g. {"OnSuccess": {"Name": "OutputExpression", "Context": {"Expression": "input1.Field"}}}' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 80px;"></textarea>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="form-footer" style="gap:12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end;">
+                        <button type="button" class="btn btn-ghost" onclick="closeEditModal()" style="height: 42px; font-weight: 600; margin-right: auto;">Cancel</button>
+                        <button type="button" id="btn-edit-test-expression" class="btn btn-ghost" style="height: 42px; border-color: rgba(16,185,129,0.3); color: var(--success); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Test Expression
+                        </button>
+                        <button type="submit" class="btn btn-primary" style="height: 42px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Test Rule Modal ═══ -->
+    <div class="modal-overlay" id="testModalOverlay">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3 id="testModalTitle">Test Rule</h3>
+                <button class="btn btn-ghost" onclick="closeTestModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="testRuleForm">
+                    <input type="hidden" id="test-rule-workflow">
+                    <input type="hidden" id="test-rule-id">
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Expression</label>
+                        <textarea id="test-rule-expression" rows="4" readonly style="width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; cursor: not-allowed; resize: none;"></textarea>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="test-rule-sampleJson" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">Sample Payload (JSON)</label>
+                        <textarea id="test-rule-sampleJson" rows="8" placeholder='e.g. { "Borrower1CreditScore": 720 }' style="width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-family: 'Consolas', monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 120px;"></textarea>
+                    </div>
+
+                    <!-- Dynamic Test Result Area -->
+                    <div id="test-rule-result-container" style="display: none; margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; line-height: 1.4; transition: all 0.2s ease-in-out;">
+                    </div>
+
+                    <div class="form-footer" style="gap:12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end;">
+                        <button type="button" class="btn btn-ghost" onclick="closeTestModal()" style="height: 42px; font-weight: 600; margin-right: auto;">Close</button>
+                        <button type="button" id="btn-dashboard-test-expression" class="btn btn-ghost" style="height: 42px; border-color: rgba(16,185,129,0.3); color: var(--success); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Test Expression
+                        </button>
+                        <button type="button" id="btn-save-test-payload" class="btn btn-primary" style="height: 42px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            Save Payload
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+    <script src="js/app.js"></script>
+</body>
+</html>
