@@ -1,4 +1,4 @@
-# Mortgage Rule Engine (DemoRuleEngine)
+# Mortgage Rule Engine
 
 An interactive, high-performance rule engine built on .NET 9 and FastEndpoints, designed for evaluating mortgage loan eligibility against customizable, dynamic rule sets.
 
