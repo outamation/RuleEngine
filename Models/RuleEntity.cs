@@ -26,4 +26,14 @@ public class RuleEntity
     public string? SampleJson { get; set; }
 
     public Rule Definition { get; set; } = null!;
+
+    /// <summary>User Id of the creator.</summary>
+    public int? CreatedBy { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>User Id of the last modifier.</summary>
+    public int? ModifiedBy { get; set; }
+
+    public DateTime? ModifiedAt { get; set; }
 }

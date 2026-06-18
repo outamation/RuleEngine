@@ -82,7 +82,7 @@ public class AddRuleFromBuilder : Endpoint<RuleDefinitionDto, RuleEntity>
     {
         var workflowId = Route<int>("workflowId");
 
-        await _ruleManager.AddRuleFromDtoAsync(workflowId, req, "Web User");
+        await _ruleManager.AddRuleFromDtoAsync(workflowId, req);
         var created = await _ruleManager.GetRuleByNameAsync(workflowId, req.RuleName);
 
         if (created is null)
@@ -123,7 +123,7 @@ public class UpdateRule : Endpoint<RuleDefinitionDto, RuleEntity>
             return;
         }
 
-        var updated = await _ruleManager.UpdateRuleAsync(workflowId, ruleId, req, "Web User");
+        var updated = await _ruleManager.UpdateRuleAsync(workflowId, ruleId, req);
         await Send.ResponseAsync(updated, cancellation: ct);
     }
 }
@@ -132,6 +132,7 @@ public class UpdateRule : Endpoint<RuleDefinitionDto, RuleEntity>
 public class ToggleRuleRequest
 {
     public bool? Enabled { get; set; }
+    public int? ModifiedBy { get; set; }
 }
 
 public class ToggleRule : Endpoint<ToggleRuleRequest, RuleEntity>
@@ -154,7 +155,6 @@ public class ToggleRule : Endpoint<ToggleRuleRequest, RuleEntity>
         var workflowId = Route<int>("workflowId");
         var ruleId = Route<int>("ruleId");
 
-        // Support both query parameter and request body
         var enabled = req.Enabled ?? false;
 
         var existing = await _ruleManager.GetRuleAsync(workflowId, ruleId);
@@ -164,7 +164,7 @@ public class ToggleRule : Endpoint<ToggleRuleRequest, RuleEntity>
             return;
         }
 
-        await _ruleManager.ToggleRuleAsync(workflowId, ruleId, enabled, "Web User");
+        await _ruleManager.ToggleRuleAsync(workflowId, ruleId, enabled, req.ModifiedBy);
         var updated = await _ruleManager.GetRuleAsync(workflowId, ruleId);
 
         if (updated is null)
@@ -197,8 +197,9 @@ public class DeleteRule : EndpointWithoutRequest
     {
         var workflowId = Route<int>("workflowId");
         var ruleId = Route<int>("ruleId");
+        var changedById = Query<int?>("changedById", isRequired: false);
 
-        await _ruleManager.DeleteRuleAsync(workflowId, ruleId, "Web User");
+        await _ruleManager.DeleteRuleAsync(workflowId, ruleId, changedById);
         await Send.NoContentAsync(cancellation: ct);
     }
 }

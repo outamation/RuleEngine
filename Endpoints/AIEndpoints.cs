@@ -1,13 +1,6 @@
-using FastEndpoints;
-using DemoRuleEngine.Services;
 using DemoRuleEngine.Models;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Generic;
+using DemoRuleEngine.Services;
+using FastEndpoints;
 
 namespace DemoRuleEngine.Endpoints;
 
@@ -41,7 +34,6 @@ public class TranslationResponse
 {
     public string Expression { get; set; } = string.Empty;
     public double Confidence { get; set; } = 1.0;
-    public string Model { get; set; } = string.Empty;
 }
 
 public class OpenAIResponse
@@ -57,21 +49,41 @@ public class AITranslate : Endpoint<TranslationRequest, TranslationResponse>
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _model;
+    // List of fallback models to try when the primary model is unavailable
+    private readonly string[] _fallbackModels;
 
     public AITranslate(ISchemaService schemaService, IHttpClientFactory httpClientFactory, IConfiguration config)
     {
         _schemaService = schemaService;
         _httpClient = httpClientFactory.CreateClient();
-        _httpClient.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
+        
+        var provider = config["AIProvider"] ?? "Nvidia";
+        var section = config.GetSection(provider);
 
-        _apiKey = config["OpenRouter:ApiKey"] ?? "";
-        _model = config["OpenRouter:Model"] ?? "meta-llama/llama-3.3-70b-instruct:free";
+        var baseUrl = section["BaseUrl"] ?? (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase)
+            ? "https://openrouter.ai/api/v1/"
+            : "https://integrate.api.nvidia.com/v1/");
+        _httpClient.BaseAddress = new Uri(baseUrl);
+
+        var timeoutSeconds = section.GetValue<int?>("TimeoutSeconds") ?? 100;
+        _httpClient.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+        _apiKey = section["ApiKey"] ?? "";
+        _model = section["Model"] ?? (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase)
+            ? "openai/gpt-oss-120b:free"
+            : "openai/gpt-oss-120b");
+
+        _fallbackModels = section.GetSection("FallbackModels").Get<string[]>() ?? Array.Empty<string>();
 
         if (!string.IsNullOrEmpty(_apiKey))
         {
             _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
-            _httpClient.DefaultRequestHeaders.Add("HTTP-Referer", "http://localhost");
-            _httpClient.DefaultRequestHeaders.Add("X-Title", "Demo Rule Engine");
+            
+            if (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
+            {
+                _httpClient.DefaultRequestHeaders.Add("HTTP-Referer", "http://localhost");
+                _httpClient.DefaultRequestHeaders.Add("X-Title", "Demo Rule Engine");
+            }
         }
     }
 
@@ -89,7 +101,10 @@ public class AITranslate : Endpoint<TranslationRequest, TranslationResponse>
             return;
         }
 
-        if (string.IsNullOrEmpty(_apiKey) || _apiKey == "YOUR_OPENROUTER_API_KEY_HERE")
+        if (string.IsNullOrEmpty(_apiKey) || 
+            _apiKey == "YOUR_OPENROUTER_API_KEY_HERE" || 
+            _apiKey == "YOUR_NVIDIA_API_KEY_HERE" || 
+            _apiKey == "")
         {
             await Send.ErrorsAsync(statusCode: 500, cancellation: ct);
             return;
@@ -107,28 +122,76 @@ public class AITranslate : Endpoint<TranslationRequest, TranslationResponse>
 
         try
         {
-            var openAiRequest = new
-            {
-                model = _model,
-                messages = new[] {
-                    new { role = "system", content = systemMessage },
-                    new { role = "user", content = req.Prompt }
-                },
-                temperature = 0,
-                max_tokens = 1000
-            };
+            // Build a combined list of the primary model followed by any configured fallbacks
+            var modelCandidates = new List<string> { _model };
+            modelCandidates.AddRange(_fallbackModels);
 
-            var response = await _httpClient.PostAsJsonAsync("chat/completions", openAiRequest, cancellationToken: ct);
-            if (!response.IsSuccessStatusCode)
+            OpenAIResponse? finalResult = null;
+            string? usedModel = null;
+            HttpResponseMessage? failedResponse = null;
+            string? failedErrorBody = null;
+
+            foreach (var model in modelCandidates)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken: ct);
-                HttpContext.Response.StatusCode = (int)response.StatusCode;
-                await Send.ResponseAsync(new TranslationResponse { Expression = $"AI Connection Error: {(int)response.StatusCode}. Details: {errorBody}" }, cancellation: ct);
+                // Prepare request payload for the current model
+                var openAiRequest = new
+                {
+                    model = model,
+                    messages = new[] {
+                        new { role = "system", content = systemMessage },
+                        new { role = "user", content = req.Prompt }
+                    },
+                    temperature = 0,
+                    max_tokens = 1000
+                };
+
+                var response = await _httpClient.PostAsJsonAsync("chat/completions", openAiRequest, cancellationToken: ct);
+                if (response.IsSuccessStatusCode)
+                {
+                    // Successful call – capture result and break out of the loop
+                    finalResult = await response.Content.ReadFromJsonAsync<OpenAIResponse>(cancellationToken: ct);
+                    usedModel = model;
+                    break;
+                }
+                else
+                {
+                    // Keep the last failure details in case we need to surface them later
+                    failedResponse = response;
+                    failedErrorBody = await response.Content.ReadAsStringAsync(cancellationToken: ct);
+                    Console.WriteLine($"[AITranslate] Model '{model}' failed with {(int)response.StatusCode}. Trying next fallback if available.");
+                    // Continue to next model candidate
+                }
+            }
+
+            if (finalResult == null)
+            {
+                // All models failed – report the error to the UI
+                var statusCode = failedResponse?.StatusCode ?? System.Net.HttpStatusCode.InternalServerError;
+                HttpContext.Response.StatusCode = (int)statusCode;
+
+                string errorMessage = $"AI service is currently unavailable ({(int)statusCode}). Please try again.";
+                if (!string.IsNullOrEmpty(failedErrorBody))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(failedErrorBody);
+                        if (doc.RootElement.TryGetProperty("error", out var errProp) && 
+                            errProp.TryGetProperty("message", out var msgProp))
+                        {
+                            errorMessage = msgProp.GetString() ?? errorMessage;
+                        }
+                    }
+                    catch
+                    {
+                        // Fallback to generic message if error parsing fails
+                    }
+                }
+
+                await HttpContext.Response.SendAsync(new { error = errorMessage }, (int)statusCode, cancellation: ct);
                 return;
             }
 
-            var result = await response.Content.ReadFromJsonAsync<OpenAIResponse>(cancellationToken: ct);
-            var expression = result?.choices?[0]?.message?.content?.Trim() ?? "";
+            var expression = finalResult?.choices?[0]?.message?.content?.Trim() ?? "";
 
             // Clean up backticks or format prefixes
             expression = expression.Replace("```json", "").Replace("```", "").Replace("csharp", "").Trim();
@@ -136,14 +199,14 @@ public class AITranslate : Endpoint<TranslationRequest, TranslationResponse>
             await Send.ResponseAsync(new TranslationResponse
             {
                 Expression = expression,
-                Confidence = 1.0,
-                Model = _model
+                Confidence = 1.0
             }, cancellation: ct);
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[AITranslate Exception] {ex}");
             HttpContext.Response.StatusCode = 500;
-            await Send.ResponseAsync(new TranslationResponse { Expression = $"AI Connection Failed: {ex.Message}" }, cancellation: ct);
+            await HttpContext.Response.SendAsync(new { error = "AI service translation failed. Please try again." }, 500, cancellation: ct);
         }
     }
 }

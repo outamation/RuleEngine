@@ -18,6 +18,9 @@ public class RuleAuditLog
     [MaxLength(200)]
     public string EntityName { get; set; } = string.Empty;
 
+    /// <summary>Rule DB Id — populated only for Rule entries; null for Workflow entries.</summary>
+    public int? RuleId { get; set; }
+
     [Required]
     [MaxLength(50)]
     public string Action { get; set; } = string.Empty;
@@ -28,8 +31,8 @@ public class RuleAuditLog
     public string? OldValue { get; set; }
     public string? NewValue { get; set; }
 
-    [MaxLength(200)]
-    public string? ChangedBy { get; set; }
+    /// <summary>User Id of the person who performed the change.</summary>
+    public int? ChangedById { get; set; }
 
     public DateTime ChangedDate { get; set; } = DateTime.UtcNow;
 }

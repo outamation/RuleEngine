@@ -18,4 +18,10 @@ public class RuleDefinitionDto
     public List<string>? WorkflowsToInject { get; set; }
     public RuleActions? Actions { get; set; }
     public List<RuleDefinitionDto>? Rules { get; set; } // Recursive structure for nested rules
+
+    /// <summary>User Id of the creator (sent by the caller on create).</summary>
+    public int? CreatedBy { get; set; }
+
+    /// <summary>User Id of the modifier (sent by the caller on update/toggle).</summary>
+    public int? ModifiedBy { get; set; }
 }

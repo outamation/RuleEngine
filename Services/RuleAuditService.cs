@@ -14,9 +14,10 @@ namespace DemoRuleEngine.Services;
 
 public interface IRuleAuditService
 {
-    Task LogAsync(string entityType, string entityName, string action, string? fieldName, string? oldValue, string? newValue, string? changedBy);
-    Task LogChangesAsync(string entityType, string entityName, RuleEntity? oldRule, RuleEntity newRule, string? changedBy);
+    Task LogAsync(string entityType, string entityName, string action, string? fieldName, string? oldValue, string? newValue, int? changedById, int? ruleId = null);
+    Task LogChangesAsync(string entityType, string entityName, RuleEntity? oldRule, RuleEntity newRule, int? changedById);
     Task<List<RuleAuditLog>> GetAuditLogsAsync(string ruleName);
+    Task<List<RuleAuditLog>> GetAuditLogsByRuleIdAsync(int ruleId);
 }
 
 public class RuleAuditService : IRuleAuditService
@@ -30,7 +31,7 @@ public class RuleAuditService : IRuleAuditService
         _logger = logger;
     }
 
-    public async Task LogAsync(string entityType, string entityName, string action, string? fieldName, string? oldValue, string? newValue, string? changedBy)
+    public async Task LogAsync(string entityType, string entityName, string action, string? fieldName, string? oldValue, string? newValue, int? changedById, int? ruleId = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<RuleDbContext>();
@@ -39,24 +40,27 @@ public class RuleAuditService : IRuleAuditService
         {
             EntityType = entityType,
             EntityName = entityName,
+            RuleId = ruleId,
             Action = action,
             FieldName = fieldName,
             OldValue = oldValue,
             NewValue = newValue,
-            ChangedBy = changedBy ?? "System",
+            ChangedById = changedById,
             ChangedDate = DateTime.UtcNow
         };
 
         context.RuleAuditLogs.Add(log);
         await context.SaveChangesAsync();
-        _logger.LogInformation("Audit log saved: {Action} {EntityType} {EntityName}", action, entityType, entityName);
+        _logger.LogInformation("Audit log saved: {Action} {EntityType} {EntityName} by user {UserId}", action, entityType, entityName, changedById);
     }
 
-    public async Task LogChangesAsync(string entityType, string entityName, RuleEntity? oldRule, RuleEntity newRule, string? changedBy)
+    public async Task LogChangesAsync(string entityType, string entityName, RuleEntity? oldRule, RuleEntity newRule, int? changedById)
     {
+        var ruleId = newRule.Id;
+
         if (oldRule is null)
         {
-            await LogAsync(entityType, entityName, "Create", null, null, JsonConvert.SerializeObject(newRule.ToRulesEngineRule()), changedBy);
+            await LogAsync(entityType, entityName, "Create", null, null, JsonConvert.SerializeObject(newRule.ToRulesEngineRule()), changedById, ruleId);
             return;
         }
 
@@ -64,54 +68,47 @@ public class RuleAuditService : IRuleAuditService
         var newDef = newRule.ToRulesEngineRule();
 
         if (oldRule.RuleName != newRule.RuleName)
-        {
-            await LogAsync(entityType, entityName, "Update", "RuleName", oldRule.RuleName, newRule.RuleName, changedBy);
-        }
+            await LogAsync(entityType, entityName, "Update", "RuleName", oldRule.RuleName, newRule.RuleName, changedById, ruleId);
 
         if (oldRule.Enabled != newRule.Enabled)
-        {
-            await LogAsync(entityType, entityName, "Update", "Enabled", oldRule.Enabled.ToString(), newRule.Enabled.ToString(), changedBy);
-        }
+            await LogAsync(entityType, entityName, "Update", "Enabled", oldRule.Enabled.ToString(), newRule.Enabled.ToString(), changedById, ruleId);
 
         if (oldRule.SampleJson != newRule.SampleJson)
-        {
-            await LogAsync(entityType, entityName, "Update", "SampleJson", oldRule.SampleJson, newRule.SampleJson, changedBy);
-        }
+            await LogAsync(entityType, entityName, "Update", "SampleJson", oldRule.SampleJson, newRule.SampleJson, changedById, ruleId);
 
         if (oldDef is not null && newDef is not null)
         {
-            // Diff individual definition fields
             if (oldDef.Expression != newDef.Expression)
-                await LogAsync(entityType, entityName, "Update", "Expression", oldDef.Expression, newDef.Expression, changedBy);
+                await LogAsync(entityType, entityName, "Update", "Expression", oldDef.Expression, newDef.Expression, changedById, ruleId);
 
             if (oldDef.SuccessEvent != newDef.SuccessEvent)
-                await LogAsync(entityType, entityName, "Update", "SuccessEvent", oldDef.SuccessEvent, newDef.SuccessEvent, changedBy);
+                await LogAsync(entityType, entityName, "Update", "SuccessEvent", oldDef.SuccessEvent, newDef.SuccessEvent, changedById, ruleId);
 
             if (oldDef.ErrorMessage != newDef.ErrorMessage)
-                await LogAsync(entityType, entityName, "Update", "ErrorMessage", oldDef.ErrorMessage, newDef.ErrorMessage, changedBy);
+                await LogAsync(entityType, entityName, "Update", "ErrorMessage", oldDef.ErrorMessage, newDef.ErrorMessage, changedById, ruleId);
 
             if (oldDef.Operator != newDef.Operator)
-                await LogAsync(entityType, entityName, "Update", "Operator", oldDef.Operator, newDef.Operator, changedBy);
+                await LogAsync(entityType, entityName, "Update", "Operator", oldDef.Operator, newDef.Operator, changedById, ruleId);
 
             var oldParams = oldDef.LocalParams != null ? JsonConvert.SerializeObject(oldDef.LocalParams) : null;
             var newParams = newDef.LocalParams != null ? JsonConvert.SerializeObject(newDef.LocalParams) : null;
             if (oldParams != newParams)
-                await LogAsync(entityType, entityName, "Update", "LocalParams", oldParams, newParams, changedBy);
+                await LogAsync(entityType, entityName, "Update", "LocalParams", oldParams, newParams, changedById, ruleId);
 
             var oldInjects = oldDef.WorkflowsToInject != null ? JsonConvert.SerializeObject(oldDef.WorkflowsToInject) : null;
             var newInjects = newDef.WorkflowsToInject != null ? JsonConvert.SerializeObject(newDef.WorkflowsToInject) : null;
             if (oldInjects != newInjects)
-                await LogAsync(entityType, entityName, "Update", "WorkflowsToInject", oldInjects, newInjects, changedBy);
+                await LogAsync(entityType, entityName, "Update", "WorkflowsToInject", oldInjects, newInjects, changedById, ruleId);
 
             var oldActions = oldDef.Actions != null ? JsonConvert.SerializeObject(oldDef.Actions) : null;
             var newActions = newDef.Actions != null ? JsonConvert.SerializeObject(newDef.Actions) : null;
             if (oldActions != newActions)
-                await LogAsync(entityType, entityName, "Update", "Actions", oldActions, newActions, changedBy);
+                await LogAsync(entityType, entityName, "Update", "Actions", oldActions, newActions, changedById, ruleId);
 
             var oldRules = oldDef.Rules != null ? JsonConvert.SerializeObject(oldDef.Rules) : null;
             var newRules = newDef.Rules != null ? JsonConvert.SerializeObject(newDef.Rules) : null;
             if (oldRules != newRules)
-                await LogAsync(entityType, entityName, "Update", "Rules", oldRules, newRules, changedBy);
+                await LogAsync(entityType, entityName, "Update", "Rules", oldRules, newRules, changedById, ruleId);
         }
     }
 
@@ -121,6 +118,16 @@ public class RuleAuditService : IRuleAuditService
         var context = scope.ServiceProvider.GetRequiredService<RuleDbContext>();
         return await context.RuleAuditLogs
             .Where(x => x.EntityName == ruleName)
+            .OrderByDescending(x => x.ChangedDate)
+            .ToListAsync();
+    }
+
+    public async Task<List<RuleAuditLog>> GetAuditLogsByRuleIdAsync(int ruleId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<RuleDbContext>();
+        return await context.RuleAuditLogs
+            .Where(x => x.RuleId == ruleId)
             .OrderByDescending(x => x.ChangedDate)
             .ToListAsync();
     }

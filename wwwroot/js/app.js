@@ -1096,7 +1096,7 @@ async function setupAIAssistant() {
         btn.disabled = true;
         btn.innerHTML = '<div class="loading-spinner-sm"></div> <span style="margin-left:8px">Generating...</span>';
         statusEl.style.display = 'flex';
-        statusEl.innerHTML = '<div class="loading-spinner-sm"></div> <span style="margin-left:8px">Consulting GPT-4o...</span>';
+        statusEl.innerHTML = '<div class="loading-spinner-sm"></div> <span style="margin-left:8px">Consulting AI...</span>';
 
         try {
             const res = await fetch(`${API_BASE}api/ai/translate`, {
@@ -1107,12 +1107,88 @@ async function setupAIAssistant() {
             const data = await res.json();
 
             if (res.ok) {
-                setTimeout(() => {
-                    exprTextarea.value = data.expression;
-                    statusEl.innerHTML = `<span>✨ <strong>Suggested:</strong> ${data.expression}</span>`;
+                 setTimeout(() => {
+                    let parsed = null;
+                    if (data && data.expression) {
+                        const rawStr = data.expression.trim();
+                        // Extract the JSON object from the response string (handles preambles and markdown text)
+                        const firstBrace = rawStr.indexOf('{');
+                        const lastBrace = rawStr.lastIndexOf('}');
+                        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                            // Extract JSON and sanitize trailing commas before braces or brackets
+                            const jsonCandidate = rawStr.substring(firstBrace, lastBrace + 1)
+                                .replace(/,\s*([\]}])/g, '$1');
+                            try {
+                                parsed = JSON.parse(jsonCandidate);
+                            } catch (e) {
+                                console.warn("JSON candidate parsing failed, trying fallback...", e);
+                            }
+                        }
+                        
+                        if (!parsed) {
+                            try {
+                                // Fallback: try parsing the whole string after cleaning trailing commas
+                                parsed = JSON.parse(rawStr.replace(/,\s*([\]}])/g, '$1'));
+                            } catch (e) {
+                                console.warn("Fallback JSON parsing failed.", e);
+                            }
+                        }
+                    }
+
+                    if (parsed) {
+                        // Populate Rule Name if present
+                        if (parsed.ruleName) {
+                            const nameInput = document.getElementById('builder-ruleName');
+                            if (nameInput) nameInput.value = parsed.ruleName;
+                        }
+
+                        // Populate Expression
+                        exprTextarea.value = parsed.expression !== undefined ? (parsed.expression || "") : "";
+
+                        // Populate Sample Payload
+                        const sampleTextarea = document.getElementById('builder-sampleJson');
+                        if (sampleTextarea && parsed.sampleJson) {
+                            sampleTextarea.value = typeof parsed.sampleJson === 'object' 
+                                ? JSON.stringify(parsed.sampleJson, null, 4) 
+                                : parsed.sampleJson;
+                        }
+
+                        // Populate success/failure messages if present
+                        const descInput = document.getElementById('builder-description');
+                        if (descInput && (parsed.description || parsed.successMessage)) {
+                            descInput.value = parsed.description || parsed.successMessage;
+                        }
+                        const failInput = document.getElementById('builder-failureMessage');
+                        if (failInput && (parsed.failureMessage || parsed.errorMessage)) {
+                            failInput.value = parsed.failureMessage || parsed.errorMessage;
+                        }
+
+                        // Populate Operator
+                        const opSelect = document.getElementById('builder-operator');
+                        if (opSelect) {
+                            opSelect.value = parsed.operator || "";
+                        }
+
+                        // Handle nested sub-rules
+                        if (parsed.rules && parsed.rules.length > 0) {
+                            const treeContainer = document.getElementById('sub-rules-tree');
+                            if (treeContainer) {
+                                treeContainer.innerHTML = '';
+                                parsed.rules.forEach(r => {
+                                    addRootSubRuleWithData(r);
+                                });
+                            }
+                        }
+
+                        statusEl.innerHTML = `<span>✨ <strong>Suggested:</strong> ${parsed.expression || parsed.ruleName || 'Nested Rules'}</span>`;
+                    } else {
+                        // Fallback: raw expression is placed in expression field
+                        exprTextarea.value = data.expression;
+                        statusEl.innerHTML = `<span>✨ <strong>Suggested:</strong> ${data.expression}</span>`;
+                    }
                     btn.disabled = false;
                     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Generate Expression';
-                    showToast('AI Logic Generated', 'success');
+                    showToast('AI Logic Generated and Populated', 'success');
                 }, 800);
             } else {
                 const errorMessage = data.error || (typeof data === 'string' ? data : 'AI Service unavailable');

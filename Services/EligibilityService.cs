@@ -48,7 +48,7 @@ public class EligibilityService : IEligibilityService
             {
                 var outcome = new RuleOutcome
                 {
-                    RuleName = r.Rule.RuleName,
+                    RuleName = r.Rule.RuleName?.ToLowerInvariant() ?? string.Empty,
                     IsSuccess = r.IsSuccess,
                     SuccessMessage = r.IsSuccess 
                         ? (string.IsNullOrEmpty(r.Rule.SuccessEvent) ? "No-No Exception" : r.Rule.SuccessEvent)
@@ -106,7 +106,7 @@ public class EligibilityService : IEligibilityService
             response.IsEligible = false;
             response.Details.Add(new RuleOutcome
             {
-                RuleName = "System.EvaluationError",
+                RuleName = "system.evaluationerror",
                 IsSuccess = false,
                 ErrorMessage = "A critical error occurred during evaluation.",
                 ExceptionMessage = ex.Message
@@ -220,32 +220,33 @@ public class EligibilityService : IEligibilityService
         if (normalizedData is not IDictionary<string, object> dict)
             return normalizedData;
 
-        var flattened = new ExpandoObject() as IDictionary<string, object>;
+        var flattened = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var kvp in dict)
         {
-            if (kvp.Value is IDictionary<string, object> nested && nested.ContainsKey("value"))
+            // Normalize hyphens to underscores for rules using _
+            var cleanKey = kvp.Key.Replace('-', '_');
+
+            // Extract nested value if it contains "value" key (case-insensitive)
+            if (kvp.Value is IDictionary<string, object> nested)
             {
-                flattened[kvp.Key] = nested["value"];
+                var valueEntry = nested.FirstOrDefault(n => n.Key.Equals("value", StringComparison.OrdinalIgnoreCase));
+                if (valueEntry.Key != null)
+                {
+                    flattened[cleanKey] = valueEntry.Value;
+                }
+                else
+                {
+                    flattened[cleanKey] = kvp.Value;
+                }
             }
             else
             {
-                flattened[kvp.Key] = kvp.Value;
+                flattened[cleanKey] = kvp.Value;
             }
         }
 
-        // Duplicate keys with hyphens replaced by underscores to support dynamic LINQ compatibility
-        var keys = flattened.Keys.ToList();
-        foreach (var key in keys)
-        {
-            if (key.Contains('-'))
-            {
-                var newKey = key.Replace('-', '_');
-                flattened[newKey] = flattened[key];
-            }
-        }
-
-        return flattened;
+        return new CaseInsensitiveDynamicObject(flattened);
     }
 
     private string FormatErrorMessage(string technicalMessage)
@@ -266,11 +267,6 @@ public class EligibilityService : IEligibilityService
         return technicalMessage;
     }
 
-    /// <summary>
-    /// Recursively scans the RuleResultTree to find any real C# dynamic evaluation exception message.
-    /// In Microsoft RulesEngine, child/sub-rule exceptions are stored in child nodes while the parent
-    /// node's ExceptionMessage might only contain a generic "Exception" string.
-    /// </summary>
     private string? GetActualExceptionMessage(RuleResultTree result)
     {
         if (result == null) return null;
@@ -285,10 +281,7 @@ public class EligibilityService : IEligibilityService
                 "No-Exception"
             };
 
-            // Check if the exception message matches any of the ignored standard messages
             bool isIgnoredMessage = ignoredMessages.Contains(result.ExceptionMessage.Trim());
-
-            // Or if it matches the rule's configured ErrorMessage (trimmed, case-insensitive)
             bool isNormalFailureMessage = result.Rule != null && 
                 result.ExceptionMessage.Trim().Equals(result.Rule.ErrorMessage?.Trim(), StringComparison.OrdinalIgnoreCase);
 
@@ -298,7 +291,6 @@ public class EligibilityService : IEligibilityService
             }
         }
 
-        // Recursively inspect children rules (sub-rules) to find any nested exception details
         if (result.ChildResults != null)
         {
             foreach (var child in result.ChildResults)
@@ -440,17 +432,35 @@ public class EligibilityService : IEligibilityService
 
             foreach (var fieldName in fields)
             {
-                if (root.TryGetProperty(fieldName, out var fieldObj))
+                var lowerField = fieldName.ToLowerInvariant();
+                var hyphenatedLowerField = lowerField.Replace('_', '-');
+
+                JsonElement fieldObj = default;
+                bool found = false;
+
+                foreach (var prop in root.EnumerateObject())
                 {
-                    // Field is an object with a "confidence" property: { "value": "...", "confidence": 0.95 }
-                    if (fieldObj.ValueKind == JsonValueKind.Object && fieldObj.TryGetProperty("confidence", out var confidenceProp))
+                    var propNameLower = prop.Name.ToLowerInvariant();
+                    if (propNameLower == lowerField || propNameLower == hyphenatedLowerField)
                     {
-                        if (confidenceProp.TryGetDouble(out var confVal))
+                        fieldObj = prop.Value;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (found && fieldObj.ValueKind == JsonValueKind.Object)
+                {
+                    // Find confidence property case-insensitively
+                    var confidenceProp = fieldObj.EnumerateObject()
+                        .FirstOrDefault(p => p.Name.Equals("confidence", StringComparison.OrdinalIgnoreCase))
+                        .Value;
+
+                    if (confidenceProp.ValueKind != JsonValueKind.Undefined && confidenceProp.TryGetDouble(out var confVal))
+                    {
+                        if (minConfidence == null || confVal < minConfidence.Value)
                         {
-                            if (minConfidence == null || confVal < minConfidence.Value)
-                            {
-                                minConfidence = confVal;
-                            }
+                            minConfidence = confVal;
                         }
                     }
                 }
@@ -468,7 +478,6 @@ public class EligibilityService : IEligibilityService
     {
         if (string.IsNullOrEmpty(template)) return template;
 
-        // Match placeholders like {input.FieldName} — root-level fields only
         var regex = new Regex(@"\{input\.([a-zA-Z0-9_]+)\}", RegexOptions.Compiled);
         
         return regex.Replace(template, match =>
@@ -503,3 +512,103 @@ public class EligibilityService : IEligibilityService
         return field?.GetValue(obj);
     }
 }
+
+#nullable disable
+public class CaseInsensitiveDynamicObject : DynamicObject, IDictionary<string, object>
+{
+    private readonly IDictionary<string, object> _dictionary;
+
+    public CaseInsensitiveDynamicObject()
+    {
+        _dictionary = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public CaseInsensitiveDynamicObject(IDictionary<string, object> dictionary)
+    {
+        _dictionary = new Dictionary<string, object>(dictionary, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public override bool TryGetMember(GetMemberBinder binder, out object result)
+    {
+        if (_dictionary.TryGetValue(binder.Name, out result))
+        {
+            return true;
+        }
+
+        var nameWithUnderscore = binder.Name.Replace('-', '_');
+        if (_dictionary.TryGetValue(nameWithUnderscore, out result))
+        {
+            return true;
+        }
+
+        var nameWithHyphen = binder.Name.Replace('_', '-');
+        if (_dictionary.TryGetValue(nameWithHyphen, out result))
+        {
+            return true;
+        }
+
+        result = null;
+        return true;
+    }
+
+    public override bool TrySetMember(SetMemberBinder binder, object value)
+    {
+        _dictionary[binder.Name] = value;
+        return true;
+    }
+
+    public override IEnumerable<string> GetDynamicMemberNames()
+    {
+        return _dictionary.Keys;
+    }
+
+    public ICollection<string> Keys => _dictionary.Keys;
+    public ICollection<object> Values => _dictionary.Values;
+    public int Count => _dictionary.Count;
+    public bool IsReadOnly => _dictionary.IsReadOnly;
+
+    public object this[string key]
+    {
+        get
+        {
+            if (_dictionary.TryGetValue(key, out var val)) return val;
+            var underscoreKey = key.Replace('-', '_');
+            if (_dictionary.TryGetValue(underscoreKey, out val)) return val;
+            var hyphenKey = key.Replace('_', '-');
+            if (_dictionary.TryGetValue(hyphenKey, out val)) return val;
+            return null!;
+        }
+        set => _dictionary[key] = value;
+    }
+
+    public void Add(string key, object value) => _dictionary.Add(key, value);
+    
+    public bool ContainsKey(string key) => 
+        _dictionary.ContainsKey(key) || 
+        _dictionary.ContainsKey(key.Replace('-', '_')) || 
+        _dictionary.ContainsKey(key.Replace('_', '-'));
+
+    public bool Remove(string key) => 
+        _dictionary.Remove(key) || 
+        _dictionary.Remove(key.Replace('-', '_')) || 
+        _dictionary.Remove(key.Replace('_', '-'));
+    
+    public bool TryGetValue(string key, out object value)
+    {
+        if (_dictionary.TryGetValue(key, out value)) return true;
+        var underscoreKey = key.Replace('-', '_');
+        if (_dictionary.TryGetValue(underscoreKey, out value)) return true;
+        var hyphenKey = key.Replace('_', '-');
+        return _dictionary.TryGetValue(hyphenKey, out value);
+    }
+
+    public void Clear() => _dictionary.Clear();
+    public void Add(KeyValuePair<string, object> item) => _dictionary.Add(item);
+    public bool Contains(KeyValuePair<string, object> item) => _dictionary.Contains(item);
+    public void CopyTo(KeyValuePair<string, object>[] array, int arrayIndex) => _dictionary.CopyTo(array, arrayIndex);
+    public bool Remove(KeyValuePair<string, object> item) => _dictionary.Remove(item);
+    
+    public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _dictionary.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _dictionary.GetEnumerator();
+}
+#nullable restore

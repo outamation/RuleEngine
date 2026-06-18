@@ -1,4 +1,5 @@
 using DemoRuleEngine.Data;
+using DemoRuleEngine.Data;
 using DemoRuleEngine.Helpers;
 using DemoRuleEngine.Models;
 using Microsoft.EntityFrameworkCore;
@@ -145,28 +146,50 @@ public class RuleManagerService : IRuleManagerService
     {
         using var db = _dbFactory.CreateDbContext();
         return await db.Workflows
-            .Select(w => new WorkflowDto { Id = w.Id, WorkflowName = w.WorkflowName })
+            .Select(w => new WorkflowDto
+            {
+                Id = w.Id,
+                WorkflowName = w.WorkflowName,
+                CreatedBy = w.CreatedBy,
+                CreatedAt = w.CreatedAt,
+                ModifiedBy = w.ModifiedBy,
+                ModifiedAt = w.ModifiedAt
+            })
             .ToListAsync();
     }
 
-    public async Task<WorkflowDto> CreateWorkflowAsync(string workflowName)
+    public async Task<WorkflowDto> CreateWorkflowAsync(string workflowName, int? createdBy = null)
     {
         using var db = _dbFactory.CreateDbContext();
 
         if (await db.Workflows.AnyAsync(w => w.WorkflowName == workflowName))
             throw new InvalidOperationException($"Workflow '{workflowName}' already exists.");
 
-        var entity = new WorkflowEntity { WorkflowName = workflowName };
+        var now = DateTime.UtcNow;
+        var entity = new WorkflowEntity
+        {
+            WorkflowName = workflowName,
+            CreatedBy = createdBy,
+            CreatedAt = now
+        };
         db.Workflows.Add(entity);
         await db.SaveChangesAsync();
 
-        await _auditService.LogAsync("Workflow", workflowName, "Create", null, null, "Workflow created", "System");
+        await _auditService.LogAsync("Workflow", workflowName, "Create", null, null, "Workflow created", createdBy);
         await ReloadEngineAsync();
 
-        return new WorkflowDto { Id = entity.Id, WorkflowName = entity.WorkflowName };
+        return new WorkflowDto
+        {
+            Id = entity.Id,
+            WorkflowName = entity.WorkflowName,
+            CreatedBy = entity.CreatedBy,
+            CreatedAt = entity.CreatedAt,
+            ModifiedBy = entity.ModifiedBy,
+            ModifiedAt = entity.ModifiedAt
+        };
     }
 
-    public async Task DeleteWorkflowAsync(int workflowId, string? changedBy = null)
+    public async Task DeleteWorkflowAsync(int workflowId, int? changedById = null)
     {
         using var db = _dbFactory.CreateDbContext();
 
@@ -177,7 +200,7 @@ public class RuleManagerService : IRuleManagerService
         db.Workflows.Remove(entity);
         await db.SaveChangesAsync();
 
-        await _auditService.LogAsync("Workflow", name, "Delete", null, null, "Workflow deleted", changedBy);
+        await _auditService.LogAsync("Workflow", name, "Delete", null, null, "Workflow deleted", changedById);
         await ReloadEngineAsync();
     }
 
@@ -201,7 +224,7 @@ public class RuleManagerService : IRuleManagerService
         return await db.Rules.FirstOrDefaultAsync(r => r.WorkflowId == workflowId && r.RuleName == ruleName);
     }
 
-    public async Task AddRuleFromDtoAsync(int workflowId, RuleDefinitionDto dto, string? changedBy = null)
+    public async Task AddRuleFromDtoAsync(int workflowId, RuleDefinitionDto dto)
     {
         using var db = _dbFactory.CreateDbContext();
 
@@ -210,17 +233,24 @@ public class RuleManagerService : IRuleManagerService
 
         var builtRule = RuleExpressionBuilder.Build(dto);
 
-        var entity = new RuleEntity { WorkflowId = workflowId, SampleJson = dto.SampleJson };
+        var now = DateTime.UtcNow;
+        var entity = new RuleEntity
+        {
+            WorkflowId = workflowId,
+            SampleJson = dto.SampleJson,
+            CreatedBy = dto.CreatedBy,
+            CreatedAt = now
+        };
         entity.UpdateFromRulesEngineRule(builtRule);
 
         db.Rules.Add(entity);
         await db.SaveChangesAsync();
 
-        await _auditService.LogChangesAsync("Rule", dto.RuleName, null, entity, changedBy);
+        await _auditService.LogChangesAsync("Rule", dto.RuleName, null, entity, dto.CreatedBy);
         await ReloadEngineAsync();
     }
 
-    public async Task<RuleEntity> UpdateRuleAsync(int workflowId, int ruleId, RuleDefinitionDto dto, string? changedBy = null)
+    public async Task<RuleEntity> UpdateRuleAsync(int workflowId, int ruleId, RuleDefinitionDto dto)
     {
         using var db = _dbFactory.CreateDbContext();
 
@@ -234,6 +264,10 @@ public class RuleManagerService : IRuleManagerService
             RuleName = entity.RuleName,
             Enabled = entity.Enabled,
             SampleJson = entity.SampleJson,
+            CreatedBy = entity.CreatedBy,
+            CreatedAt = entity.CreatedAt,
+            ModifiedBy = entity.ModifiedBy,
+            ModifiedAt = entity.ModifiedAt,
             Definition = new Rule
             {
                 Expression = entity.Definition?.Expression,
@@ -253,15 +287,17 @@ public class RuleManagerService : IRuleManagerService
         var builtRule = RuleExpressionBuilder.Build(dto);
         entity.UpdateFromRulesEngineRule(builtRule);
         entity.SampleJson = dto.SampleJson;
+        entity.ModifiedBy = dto.ModifiedBy;
+        entity.ModifiedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
-        await _auditService.LogChangesAsync("Rule", dto.RuleName, oldClone, entity, changedBy);
+        await _auditService.LogChangesAsync("Rule", dto.RuleName, oldClone, entity, dto.ModifiedBy);
         await ReloadEngineAsync();
 
         return entity;
     }
 
-    public async Task ToggleRuleAsync(int workflowId, int ruleId, bool enabled, string? changedBy = null)
+    public async Task ToggleRuleAsync(int workflowId, int ruleId, bool enabled, int? modifiedBy = null)
     {
         using var db = _dbFactory.CreateDbContext();
 
@@ -270,13 +306,15 @@ public class RuleManagerService : IRuleManagerService
 
         var oldVal = entity.Enabled.ToString();
         entity.Enabled = enabled;
+        entity.ModifiedBy = modifiedBy;
+        entity.ModifiedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        await _auditService.LogAsync("Rule", entity.RuleName, "Update", "Enabled", oldVal, enabled.ToString(), changedBy);
+        await _auditService.LogAsync("Rule", entity.RuleName, "Update", "Enabled", oldVal, enabled.ToString(), modifiedBy, ruleId);
         await ReloadEngineAsync();
     }
 
-    public async Task DeleteRuleAsync(int workflowId, int ruleId, string? changedBy = null)
+    public async Task DeleteRuleAsync(int workflowId, int ruleId, int? changedById = null)
     {
         using var db = _dbFactory.CreateDbContext();
 
@@ -287,7 +325,7 @@ public class RuleManagerService : IRuleManagerService
         db.Rules.Remove(entity);
         await db.SaveChangesAsync();
 
-        await _auditService.LogAsync("Rule", ruleName, "Delete", null, null, "Rule deleted", changedBy);
+        await _auditService.LogAsync("Rule", ruleName, "Delete", null, null, "Rule deleted", changedById, ruleId);
         await ReloadEngineAsync();
     }
 

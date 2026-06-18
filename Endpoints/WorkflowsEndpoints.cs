@@ -1,10 +1,6 @@
-using FastEndpoints;
-using DemoRuleEngine.Services;
 using DemoRuleEngine.Models;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Linq;
+using DemoRuleEngine.Services;
+using FastEndpoints;
 
 namespace DemoRuleEngine.Endpoints;
 
@@ -33,6 +29,7 @@ public class GetWorkflows : EndpointWithoutRequest<List<WorkflowDto>>
 public class CreateWorkflowRequest
 {
     public string WorkflowName { get; set; } = string.Empty;
+    public int? CreatedBy { get; set; }
 }
 
 public class CreateWorkflow : Endpoint<CreateWorkflowRequest, WorkflowDto>
@@ -58,7 +55,7 @@ public class CreateWorkflow : Endpoint<CreateWorkflowRequest, WorkflowDto>
             return;
         }
 
-        var wf = await _ruleManager.CreateWorkflowAsync(req.WorkflowName);
+        var wf = await _ruleManager.CreateWorkflowAsync(req.WorkflowName, req.CreatedBy);
         await Send.ResponseAsync(wf, cancellation: ct);
     }
 }
@@ -81,7 +78,8 @@ public class DeleteWorkflow : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var workflowId = Route<int>("workflowId");
-        await _ruleManager.DeleteWorkflowAsync(workflowId, "Web User");
+        var changedById = Query<int?>("changedById", isRequired: false);
+        await _ruleManager.DeleteWorkflowAsync(workflowId, changedById);
         await Send.NoContentAsync(cancellation: ct);
     }
 }

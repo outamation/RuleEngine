@@ -1,4 +1,5 @@
 using DemoRuleEngine.Models;
+using DemoRuleEngine.Models;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -10,17 +11,17 @@ public interface IRuleManagerService
 
     // Workflows
     Task<List<WorkflowDto>> GetWorkflowsAsync();
-    Task<WorkflowDto> CreateWorkflowAsync(string workflowName);
-    Task DeleteWorkflowAsync(int workflowId, string? changedBy = null);
+    Task<WorkflowDto> CreateWorkflowAsync(string workflowName, int? createdBy = null);
+    Task DeleteWorkflowAsync(int workflowId, int? changedById = null);
 
     // Rules
     Task<List<RuleEntity>> GetRulesAsync(int workflowId);
     Task<RuleEntity?> GetRuleAsync(int workflowId, int ruleId);
     Task<RuleEntity?> GetRuleByNameAsync(int workflowId, string ruleName);
-    Task AddRuleFromDtoAsync(int workflowId, RuleDefinitionDto dto, string? changedBy = null);
-    Task<RuleEntity> UpdateRuleAsync(int workflowId, int ruleId, RuleDefinitionDto dto, string? changedBy = null);
-    Task ToggleRuleAsync(int workflowId, int ruleId, bool enabled, string? changedBy = null);
-    Task DeleteRuleAsync(int workflowId, int ruleId, string? changedBy = null);
+    Task AddRuleFromDtoAsync(int workflowId, RuleDefinitionDto dto);
+    Task<RuleEntity> UpdateRuleAsync(int workflowId, int ruleId, RuleDefinitionDto dto);
+    Task ToggleRuleAsync(int workflowId, int ruleId, bool enabled, int? modifiedBy = null);
+    Task DeleteRuleAsync(int workflowId, int ruleId, int? changedById = null);
 
     // Helpers
     Task<string?> GetWorkflowNameAsync(int workflowId);
