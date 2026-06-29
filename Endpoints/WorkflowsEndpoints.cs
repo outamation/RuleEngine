@@ -60,6 +60,54 @@ public class CreateWorkflow : Endpoint<CreateWorkflowRequest, WorkflowDto>
     }
 }
 
+public class UpdateWorkflowRequest
+{
+    public string WorkflowName { get; set; } = string.Empty;
+    public int? ModifiedBy { get; set; }
+}
+
+public class UpdateWorkflow : Endpoint<UpdateWorkflowRequest, WorkflowDto>
+{
+    private readonly IRuleManagerService _ruleManager;
+
+    public UpdateWorkflow(IRuleManagerService ruleManager)
+    {
+        _ruleManager = ruleManager;
+    }
+
+    public override void Configure()
+    {
+        Put("/api/rules/workflows/{workflowId:int}");
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(UpdateWorkflowRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.WorkflowName))
+        {
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+
+        var workflowId = Route<int>("workflowId");
+        
+        try
+        {
+            var wf = await _ruleManager.UpdateWorkflowAsync(workflowId, req.WorkflowName, req.ModifiedBy);
+            await Send.ResponseAsync(wf, cancellation: ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            await Send.NotFoundAsync(cancellation: ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            AddError(ex.Message);
+            await Send.ErrorsAsync(cancellation: ct);
+        }
+    }
+}
+
 public class DeleteWorkflow : EndpointWithoutRequest
 {
     private readonly IRuleManagerService _ruleManager;

@@ -62,7 +62,10 @@
                 </div>
                 <div class="workflow-control">
                     <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:4px;">Active Workflow</label>
-                    <select id="eval-workflow-selector" class="workflow-select-main"></select>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="eval-workflow-selector" class="workflow-select-main"></select>
+                        <button class="btn btn-ghost" onclick="openWorkflowModal()" title="Manage Workflows" style="padding: 0 8px;">⚙️</button>
+                    </div>
                 </div>
             </div>
             <div class="evaluator-layout">
@@ -100,8 +103,9 @@
                     <h2>Rule Dashboard</h2>
                     <p>View and manage all configured eligibility rules</p>
                 </div>
-                <div class="workflow-management">
+                <div class="workflow-management" style="display: flex; gap: 8px;">
                     <select id="rules-workflow-selector" class="workflow-select-main"></select>
+                    <button class="btn btn-ghost" onclick="openWorkflowModal()" title="Manage Workflows" style="padding: 0 8px;">⚙️</button>
                 </div>
             </div>
             <div class="rules-stats" id="rulesStats"></div>
@@ -118,8 +122,9 @@
                     </h2>
                     <p>Create new business rules with AI assistance</p>
                 </div>
-                <div class="workflow-management">
+                <div class="workflow-management" style="display: flex; gap: 8px;">
                     <select id="builder-workflow-selector" class="workflow-select-main"></select>
+                    <button class="btn btn-ghost" onclick="openWorkflowModal()" title="Manage Workflows" style="padding: 0 8px;">⚙️</button>
                 </div>
             </div>
 
@@ -426,6 +431,25 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Workflow Management Modal ═══ -->
+    <div class="modal-overlay" id="workflowModalOverlay">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Manage Workflows</h3>
+                <button class="btn btn-ghost" onclick="closeWorkflowModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <input type="text" id="new-workflow-name" placeholder="New Workflow Name" style="flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none;">
+                    <button class="btn btn-primary" onclick="createWorkflow()">Add</button>
+                </div>
+                <div id="workflow-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+                    <!-- Workflow list populated via JS -->
+                </div>
             </div>
         </div>
     </div>

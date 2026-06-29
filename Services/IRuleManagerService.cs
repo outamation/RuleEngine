@@ -12,6 +12,7 @@ public interface IRuleManagerService
     // Workflows
     Task<List<WorkflowDto>> GetWorkflowsAsync();
     Task<WorkflowDto> CreateWorkflowAsync(string workflowName, int? createdBy = null);
+    Task<WorkflowDto> UpdateWorkflowAsync(int workflowId, string workflowName, int? modifiedBy = null);
     Task DeleteWorkflowAsync(int workflowId, int? changedById = null);
 
     // Rules

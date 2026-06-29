@@ -120,7 +120,12 @@ public class RuleManagerService : IRuleManagerService
         var json = JsonConvert.SerializeObject(workflows);
         var clone = JsonConvert.DeserializeObject<List<Workflow>>(json) ?? new List<Workflow>();
 
-        _engine = new RulesEngine.RulesEngine(clone.ToArray(), _reSettings);
+        var validWorkflows = clone.Where(w => 
+            (w.Rules != null && w.Rules.Any()) || 
+            (w.WorkflowsToInject != null && w.WorkflowsToInject.Any())
+        ).ToArray();
+
+        _engine = new RulesEngine.RulesEngine(validWorkflows, _reSettings);
         _logger.LogInformation("Engine hot-reloaded successfully.");
     }
 
@@ -176,6 +181,49 @@ public class RuleManagerService : IRuleManagerService
         await db.SaveChangesAsync();
 
         await _auditService.LogAsync("Workflow", workflowName, "Create", null, null, "Workflow created", createdBy);
+        await ReloadEngineAsync();
+
+        return new WorkflowDto
+        {
+            Id = entity.Id,
+            WorkflowName = entity.WorkflowName,
+            CreatedBy = entity.CreatedBy,
+            CreatedAt = entity.CreatedAt,
+            ModifiedBy = entity.ModifiedBy,
+            ModifiedAt = entity.ModifiedAt
+        };
+    }
+
+    public async Task<WorkflowDto> UpdateWorkflowAsync(int workflowId, string workflowName, int? modifiedBy = null)
+    {
+        using var db = _dbFactory.CreateDbContext();
+
+        var entity = await db.Workflows.FirstOrDefaultAsync(w => w.Id == workflowId);
+        if (entity == null)
+            throw new KeyNotFoundException($"Workflow ID {workflowId} not found.");
+
+        if (entity.WorkflowName == workflowName)
+            return new WorkflowDto
+            {
+                Id = entity.Id,
+                WorkflowName = entity.WorkflowName,
+                CreatedBy = entity.CreatedBy,
+                CreatedAt = entity.CreatedAt,
+                ModifiedBy = entity.ModifiedBy,
+                ModifiedAt = entity.ModifiedAt
+            };
+
+        if (await db.Workflows.AnyAsync(w => w.WorkflowName == workflowName && w.Id != workflowId))
+            throw new InvalidOperationException($"Workflow '{workflowName}' already exists.");
+
+        var oldName = entity.WorkflowName;
+        entity.WorkflowName = workflowName;
+        entity.ModifiedBy = modifiedBy;
+        entity.ModifiedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+
+        await _auditService.LogAsync("Workflow", entity.WorkflowName, "Update", "WorkflowName", oldName, workflowName, modifiedBy);
         await ReloadEngineAsync();
 
         return new WorkflowDto

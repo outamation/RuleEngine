@@ -56,6 +56,93 @@ function setupWorkflowSelectors() {
     });
 }
 
+function openWorkflowModal() {
+    document.getElementById('workflowModalOverlay').classList.add('open');
+    renderWorkflowList();
+}
+
+function closeWorkflowModal() {
+    document.getElementById('workflowModalOverlay').classList.remove('open');
+}
+
+function renderWorkflowList() {
+    const listEl = document.getElementById('workflow-list');
+    listEl.innerHTML = allWorkflows.map(w => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border);">
+            <div style="display: flex; gap: 8px; align-items: center; flex: 1; margin-right: 8px;">
+                <input type="text" id="edit-wf-name-${w.id}" value="${w.workflowName}" style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-primary); outline: none; transition: border 0.2s;" onfocus="this.style.border='1px solid var(--border)'; this.style.background='var(--bg-input)';" onblur="this.style.border='1px solid transparent'; this.style.background='transparent';">
+            </div>
+            <div style="display: flex; gap: 4px;">
+                <button class="btn btn-sm btn-ghost" onclick="editWorkflowName(${w.id})" title="Save Name">Save</button>
+                <button class="btn btn-sm btn-ghost" onclick="deleteWorkflow(${w.id})" style="color: var(--danger);" title="Delete Workflow">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function createWorkflow() {
+    const nameEl = document.getElementById('new-workflow-name');
+    const workflowName = nameEl.value.trim();
+    if (!workflowName) return showToast('Please enter a workflow name', 'error');
+    
+    try {
+        const res = await fetch(`${API_BASE}api/rules/workflows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflowName: workflowName })
+        });
+        if (res.ok) {
+            showToast('Workflow created successfully', 'success');
+            nameEl.value = '';
+            await loadWorkflows();
+            renderWorkflowList();
+        } else {
+            showToast('Failed to create workflow', 'error');
+        }
+    } catch (e) {
+        showToast('Error creating workflow', 'error');
+    }
+}
+
+async function editWorkflowName(id) {
+    const nameEl = document.getElementById(`edit-wf-name-${id}`);
+    const newName = nameEl.value.trim();
+    if (!newName) return showToast('Workflow name cannot be empty', 'error');
+    
+    try {
+        const res = await fetch(`${API_BASE}api/rules/workflows/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflowName: newName })
+        });
+        if (res.ok) {
+            showToast('Workflow name updated successfully', 'success');
+            await loadWorkflows();
+            renderWorkflowList();
+        } else {
+            showToast('Failed to update workflow', 'error');
+        }
+    } catch (e) {
+        showToast('Error updating workflow', 'error');
+    }
+}
+
+async function deleteWorkflow(id) {
+    if (!confirm('Are you sure you want to delete this workflow and all its rules?')) return;
+    try {
+        const res = await fetch(`${API_BASE}api/rules/workflows/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Workflow deleted successfully', 'success');
+            await loadWorkflows();
+            renderWorkflowList();
+        } else {
+            showToast('Failed to delete workflow', 'error');
+        }
+    } catch (e) {
+        showToast('Error deleting workflow', 'error');
+    }
+}
+
 // ─── Tab Navigation ─────────────────────────────────────
 function setupTabNavigation() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -290,6 +377,7 @@ function renderRulesDashboard(rules) {
                     <button class="btn btn-sm btn-ghost" onclick="openAuditPanel('${r.ruleName}')" title="View Audit Trail">History</button>
                     <button class="btn btn-sm btn-ghost" onclick="openEditModal(${r.workflowId}, ${r.id})" title="Edit Rule">Edit</button>
                     <button class="btn btn-sm btn-ghost" onclick="openTestModal(${r.workflowId}, ${r.id})" style="color: var(--success);" title="Test Rule">Test</button>
+                    <button class="btn btn-sm btn-ghost" onclick="deleteRule(${r.workflowId}, ${r.id})" style="color: var(--danger);" title="Delete Rule">Delete</button>
                     <label class="toggle-switch-sm" title="${isEnabled ? 'Disable' : 'Enable'} Rule">
                         <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="toggleRule(${r.workflowId}, ${r.id}, this)">
                         <span class="toggle-slider"></span>
